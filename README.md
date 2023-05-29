@@ -77,3 +77,15 @@ You can modify the defaults using the builder pattern.
 The library uses OAuth2 to authenticate to all the APIs except Enterprise Manager which uses Basic Authentication.
 
 See Veeam's documentation for more information on the authentication process.
+
+## Build URL
+
+The library provides a helper function to build the URL for the Veeam REST API.
+
+The function takes an endpoint parameter which is a shortened version of the URL.
+
+For example, to get a list of backups from VBR, the endpoint would be "backups", normally the full URL would be:
+
+```
+https://<address>:<port>/api/v1/backups
+```

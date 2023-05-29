@@ -75,6 +75,18 @@
 //! The library uses OAuth2 to authenticate to all the APIs except Enterprise Manager which uses Basic Authentication.
 //! 
 //! See Veeam's documentation for more information on the authentication process.
+//! 
+//! ## Build URL
+//!
+//! The library provides a helper function to build the URL for the Veeam REST API.
+//!
+//! The function takes an endpoint parameter which is a shortened version of the URL.
+//!
+//! For example, to get a list of backups from VBR, the endpoint would be "backups", normally the full URL would be:
+//!
+//! ```
+//! https://<address>:<port>/api/v1/backups
+//! ```
 
 mod models;
 pub use models::*;
@@ -99,8 +111,6 @@ pub struct VServerBuilder {
 
 
 /// LogInError is used to return errors from the build method.
-/// 
-/// #
 #[derive(Error, Debug)]
 pub enum LogInError {
     #[error("The VEEAM_API_PASSWORD environmental variable is missing")]
@@ -121,6 +131,7 @@ pub enum LogInError {
     StatusCodeError(reqwest::StatusCode),
 }
 
+#[doc(hidden)]
 pub fn check_valid_ip(address: &str) -> bool {
     IpAddr::from_str(address).is_ok()
 }
@@ -145,7 +156,7 @@ impl VServerBuilder {
         self
     }
 
-    /// Manually set the timeout for the client; default is 10 seconds
+    /// Manually set the timeout for the client; default is 30 seconds
     pub fn timeout(&mut self, value: u64) -> &mut Self {
         self.timeout = Some(value);
         self
