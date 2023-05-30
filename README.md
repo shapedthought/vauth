@@ -1,6 +1,9 @@
 # VAuth - Veeam Authentication Library
 
+_Note that this library is unofficial and not endorsed or supported by Veeam_
+
 This library is used to authenticate to Veeam Backup Product REST APIs.
+
 It supports authentication to Veeam Backup & Replication, Veeam Backup for Microsoft Office 365, VONE and the Veeam Cloud Backup Products (AWS, AZURE & GCP).
 
 The library is designed as a wrapper around the reqwest library and provides a simple interface to authenticate to the Veeam REST APIs.
