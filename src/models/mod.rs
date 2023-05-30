@@ -38,7 +38,7 @@ pub struct Profile {
 }
 
 impl Profile {
-    #[doc(hidden)]
+    /// Create a new profile if it does not exist.
     pub fn new(
         name: String,
         url: String,
