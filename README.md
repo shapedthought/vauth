@@ -98,12 +98,12 @@ let mut profile = Profile::new(
 
 The Profile struct has the following fields:
 
-| Field         | Description                                                                                          |
-| ------------- | ---------------------------------------------------------------------------------------------------- |
-| name          | The name of the profile. This is used to identify the profile.                                       |
-| url           | The URL used to authenticate which must have the colon at the start                                  |
-| api_version   | The API version, this is used to construct the URLs e.g. http://ADDRESS:PORT/api/API/API_VERSION/... |
-| x_api_version | This is the X-API-Version header value.                                                              |
+| Field         | Description                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| name          | The name of the profile. This is used to identify the profile.                                   |
+| url           | The URL used to authenticate which must have the colon at the start                              |
+| api_version   | The API version, this is used to construct the URLs e.g. http://address:port/api/API_VERSION/... |
+| x_api_version | This is the X-API-Version header value.                                                          |
 
 This can then be passed to the build method.
 
