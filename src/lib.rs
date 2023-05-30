@@ -166,8 +166,6 @@ pub enum LogInError {
     PasswordEmpty,
     #[error("IP Address cannot be empty")]
     IpAddressEmpty,
-    #[error("IP Address is not valid")]
-    IpAddressInvalid,
     #[error("Error in sending request `{0:?}`")]
     ReqwestError(#[from] reqwest::Error),
     #[error("Status Code Error `{0}`")]
@@ -273,7 +271,7 @@ impl VServerBuilder {
             .build()?;
 
         let mut headers = HeaderMap::new();
-        headers.insert(ACCEPT, "application/jason".parse().unwrap());
+        headers.insert(ACCEPT, "application/json".parse().unwrap());
         let auth_url = format!("https://{}{}", self.address, profile.url);
 
         let response: reqwest::Response = if profile.name != "ENTMAN" {

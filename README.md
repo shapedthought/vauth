@@ -11,6 +11,14 @@ Note that the library requires the VEEAM_API_PASSWORD environmental variable to 
 
 This library is not intended to be a full featured library for the Veeam REST APIs, and there is no intention to turn it into one.
 
+## Installation
+
+Run the following command to add the library to your project:
+
+```
+cargo add vauth
+```
+
 ## Usage
 
 ```rust
