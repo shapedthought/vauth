@@ -1,10 +1,13 @@
 [package]
 name = "vauth"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A simple Veeam API authentication library"
+authors = ["Ed Howard"]
 license = "MIT"
-
+repository = "https://github.com/shapedthought/vauth"
+documentation = "https://docs.rs/vauth/0.1.0/vauth/"
+homepage = "https://github.com/shapedthought/vauth"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
