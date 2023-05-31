@@ -42,7 +42,7 @@ async fn  main() -> Result<()> {
 
     let address = env::var("VEEAM_API_ADDRESS").unwrap();
 
-    let client: Client= VServerBuilder::new(&address, username)
+    let (client, _login_response) = VServerBuilder::new(&address, username)
         .insecure()
         .build(&mut profile)
         .await?;
@@ -59,7 +59,7 @@ async fn  main() -> Result<()> {
 
 When the build method is called, the library will attempt to authenticate to the Veeam REST API and return a reqwest client.
 
-You can then use the reqwest client to make requests to the Veeam REST API.
+You can then use the reqwest client and login response tuple, this allows you to either directly use the client with the authentication headers already set. Or you can chose to save the login response which contains the token and refresh token which can then be used in subsiquent calls without having to re-login.
 
 There is also a helper function to build the URL for the Veeam REST API.
 
