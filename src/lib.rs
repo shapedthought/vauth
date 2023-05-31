@@ -16,7 +16,7 @@
 //! ## Usage
 //! 
 //! ```rust
-//! use vauth::{VServerBuilder, Profile, VProfile, build_url};
+//! use vauth::{VServerBuilder, Profile, VProfile, build_url, LoginResponse};
 //! use serde_json::Value;
 //! use reqwest::Client;
 //! use anyhow::Result;
@@ -33,7 +33,7 @@
 //! 
 //!     let address = env::var("VEEAM_API_ADDRESS").unwrap();
 //! 
-//!     let client: Client= VServerBuilder::new(&address, username)
+//!     let (client, _login_response) = VServerBuilder::new(&address, username)
 //!         .insecure()
 //!         .build(&mut profile)
 //!         .await?;
@@ -168,6 +168,8 @@ pub enum LogInError {
     PasswordEmpty,
     #[error("IP Address cannot be empty")]
     IpAddressEmpty,
+    #[error("No refresh token")]
+    NoRefreshToken,
     #[error("Error in sending request `{0:?}`")]
     ReqwestError(#[from] reqwest::Error),
     #[error("Status Code Error `{0}`")]
@@ -224,7 +226,10 @@ impl VServerBuilder {
     }
 
     /// Build the reqwest client, this takes a mutable reference to a Profile and will attempt to authenticate to the Veeam REST API.
-    pub async fn build(&mut self, profile: &mut Profile) -> Result<reqwest::Client, LogInError> {
+    /// It will return a tuple with both the client and the login response struct. 
+    /// The login response struct contains the token and refresh token which you can save for
+    /// future use. 
+    pub async fn build(&mut self, profile: &mut Profile) -> Result<(reqwest::Client, LoginResponse), LogInError> {
         if self.username.is_empty() {
             return Err(LogInError::UsernameEmpty);
         }
@@ -324,6 +329,7 @@ impl VServerBuilder {
             return Err(LogInError::StatusCodeError(response.status()));
         }
 
+
         let bearer: String = if profile.name != *"ENTMAN" {
             format!("Bearer {}", res_data.access_token.as_str().trim())
         } else {
@@ -346,8 +352,9 @@ impl VServerBuilder {
             .default_headers(req_header)
             .build()?;
 
-        Ok(req_builder)
+        Ok((req_builder, res_data))
     }
+
 }
 
 /// Helper function to build the url for the reqwest client
@@ -400,6 +407,22 @@ pub fn build_url(address: &String, end_point: &String, profile: &Profile) -> Res
 
 }
 
+/// Helper function to build Auth Headers, this is useful for when you still have a valid token
+pub fn build_auth_headers(token: &String, profile: &Profile) -> HeaderMap {
+    
+    let mut headermap = HeaderMap::new();
+    headermap.insert(ACCEPT, "application/json".parse().unwrap());
+    headermap.insert(CONTENT_TYPE, "application/json".parse().unwrap());
+    if profile.name == *"ENTMAN" {
+        headermap.insert("X-RestSvcSessionId", token.parse().unwrap());
+    } else {
+        let bearer = format!("Bearer {}", token);
+        headermap.insert("Authorization", bearer.parse().unwrap());
+        headermap.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
+    }
+    headermap
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -437,11 +460,11 @@ mod tests {
         let username = env::var("VEEAM_API_USERNAME").unwrap();
         let address = env::var("VEEAM_API_ADDRESS").unwrap();
 
-        let client = VServerBuilder::new(&address, username).insecure().build(&mut profile).await;
+        let (client, _res) = VServerBuilder::new(&address, username).insecure().build(&mut profile).await.unwrap();
 
         let url = build_url(&address, &String::from("jobs"), &profile).unwrap();
 
-        let response = client.unwrap().get(&url).send().await.unwrap();
+        let response = client.get(&url).send().await.unwrap();
 
         assert!(response.status().is_success());
     }
@@ -453,11 +476,11 @@ mod tests {
         let username = env::var("VEEAM_API_USERNAME").unwrap();
         let address = env::var("VEEAM_API_ADDRESS").unwrap();
 
-        let client = VServerBuilder::new(&address, username).insecure().build(&mut profile).await;
+        let (client, _res) = VServerBuilder ::new(&address, username).insecure().build(&mut profile).await.unwrap();
 
         let url = build_url(&address, &String::from("jobs"), &profile).unwrap();
 
-        let response = client.unwrap().get(&url).send().await.unwrap();
+        let response = client.get(&url).send().await.unwrap();
 
         assert!(response.status().is_success());
     }
@@ -469,11 +492,13 @@ mod tests {
         let username = env::var("VEEAM_API_USERNAME").unwrap();
         let address = env::var("VB365_API_ADDRESS").unwrap();
 
-        let client = VServerBuilder::new(&address, username).insecure().build(&mut profile).await;
+        let mut vserver = VServerBuilder::new(&address, username);
+
+        let (client, _res) = vserver.insecure().build(&mut profile).await.unwrap();
 
         let url = build_url(&address, &String::from("Jobs"), &profile).unwrap();
 
-        let response = client.unwrap().get(&url).send().await.unwrap();
+        let response = client.get(&url).send().await.unwrap();
 
         assert!(response.status().is_success());
     }
