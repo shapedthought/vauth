@@ -535,7 +535,7 @@ mod tests {
         let username = env::var("VEEAM_API_USERNAME").unwrap();
         let address = env::var("VEEAM_API_ADDRESS").unwrap();
 
-        let (client, _res) = VServerBuilder ::new(&address, username).insecure().build(&mut profile).await.unwrap();
+        let (client, _res) = VServerBuilder::new(&address, username).insecure().build(&mut profile).await.unwrap();
 
         let url = build_url(&address, &String::from("jobs"), &profile).unwrap();
 
