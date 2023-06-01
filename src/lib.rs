@@ -14,7 +14,9 @@
 //! This library is not intended to be a full featured library for the Veeam REST APIs, and there is no intention to turn it into one.
 //! 
 //! ## Usage
-//! 
+//!
+//! Login with direct use of the client.
+//!
 //! ```rust
 //! use vauth::{VServerBuilder, Profile, VProfile, build_url, LoginResponse};
 //! use serde_json::Value;
@@ -24,7 +26,7 @@
 //! 
 //! #[tokio::main]
 //! async fn  main() -> Result<()> {
-//!     let mut profile = Profile::get_profile(VProfile::ENTMAN);
+//!     let mut profile = Profile::get_profile(VProfile::VBR);
 //! 
 //!     // Used for testing
 //!     dotenvy::dotenv()?;
@@ -33,11 +35,16 @@
 //! 
 //!     let address = env::var("VEEAM_API_ADDRESS").unwrap();
 //! 
-//!     let (client, _login_response) = VServerBuilder::new(&address, username)
+//!     let (client, login_response) = VServerBuilder::new(&address, username)
 //!         .insecure()
 //!         .build(&mut profile)
 //!         .await?;
-//! 
+//!
+//!     // Save the token for later use
+//!     let mut json_file = fs::File::create(&"token.json".to_string())?
+//!     let token_string = serde_json::to_string_pretty(&login_response)?;
+//!     json_file.write_all(token_string.as_bytes())?
+//!
 //!     let endpoint = build_url(&address, &"backups".to_string(), &profile)?;
 //! 
 //!     let response: Value = client.get(&endpoint).send().await?.json().await?;
@@ -48,14 +55,54 @@
 //! }
 //! ```
 //! 
-//! When the build method is called, the library will attempt to authenticate to the Veeam REST API and return a reqwest client.
+//! When the build method is called, the library will attempt to authenticate to the Veeam REST API and return the reqwest client around
+//! the authentication response struct as a tuple.
 //! 
 //! You can then use the reqwest client to make requests to the Veeam REST API.
 //! 
-//! There is also a helper function to build the URL for the Veeam REST API.
+//! There are helper functions to both build the URL for the Veeam REST API as well as use an
+//! existing toke to build authented headers.
 //! 
 //! Note that the library uses async/await and therefore requires the use of the tokio runtime.
+//!
+//! ### Reusing a saved response struct.
 //! 
+//! ```rust
+//! use vauth::{Profile, VProfile, build_url, LoginResponse, build_auth_headers};
+//! use serde_json::Value;
+//! use reqwest::Client;
+//! use anyhow::Result;
+//! use std::env;
+//! use std::fs;
+//! 
+//! #[tokio::main]
+//! async fn  main() -> Result<()> {
+//!     let mut profile = Profile::get_profile(VProfile::VBR);
+//! 
+//!     // Used for testing
+//!     dotenvy::dotenv()?;
+//!    
+//!     let login_response: LoginResponse = {
+//!         let data = fs::read_to_string("token.json")?;
+//!         serde_json::from_str(&data)?
+//!     }
+//!
+//!     let client = reqwest::ClientBuilder()
+//!         .danger_accept_invalid_certs(true)
+//!         .build()?;
+//!
+//!     let headers = build_auth_headers(&login_response.access_token, &profile);
+//!
+//!     let endpoint = build_url(&address, &"backups".to_string(), &profile)?;
+//!
+//!     let response: Value = client.get(&endpoint).headers(&headers).send().await?.json().await?;
+//! 
+//!     println!("{:#?}", response);
+//! 
+//!     Ok(())
+//! }
+//! ```
+//!
 //! ## Default Profiles
 //! 
 //! The library has default profiles for each API which I will try to keep up to date.
@@ -127,6 +174,18 @@
 //! let endpoint = build_url(&address, &"backups".to_string(), &profile)?;
 //! ```
 //! 
+//! ## Build Authentication Headers
+//!
+//! The library also provides a helper function to build the authentication headers from the saved
+//! response struct. 
+//!
+//! ```no run 
+//!
+//! let headers = build_auth_headers(&access_token, &profile);
+//!
+//! ``
+//! This can then be used directly with a reqwest client. 
+//!
 //! ## Authentication
 //! 
 //! The library uses OAuth2 to authenticate to all the APIs except Enterprise Manager which uses Basic Authentication.
@@ -135,9 +194,7 @@
 
 mod models;
 pub use models::*;
-use reqwest::{
-    header::{HeaderMap, ACCEPT, CONTENT_LENGTH, CONTENT_TYPE},
-};
+use reqwest::header::{HeaderMap, ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
 // use serde_urlencoded;
 use std::{env, time::Duration, net::IpAddr, str::FromStr};
 use thiserror::Error;
@@ -426,6 +483,8 @@ pub fn build_auth_headers(token: &String, profile: &Profile) -> HeaderMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::{self, File};
+    use std::io::Write;
 
     #[test]
     fn it_works() {
@@ -494,7 +553,11 @@ mod tests {
 
         let mut vserver = VServerBuilder::new(&address, username);
 
-        let (client, _res) = vserver.insecure().build(&mut profile).await.unwrap();
+        let (client, res) = vserver.insecure().build(&mut profile).await.unwrap();
+
+        let mut json_file = File::create(&"token.json".to_string()).unwrap();
+        let token_string = serde_json::to_string_pretty(&res).unwrap();
+        json_file.write_all(token_string.as_bytes()).unwrap();
 
         let url = build_url(&address, &String::from("Jobs"), &profile).unwrap();
 
@@ -502,4 +565,33 @@ mod tests {
 
         assert!(response.status().is_success());
     }
+
+     #[tokio::test]
+    async fn test_vb365_use_token() {
+        dotenvy::dotenv().unwrap();
+        let mut profile = Profile::get_profile(VProfile::VB365);
+
+        dotenvy::dotenv().unwrap();
+        
+        let address = env::var("VB365_API_ADDRESS").unwrap();
+
+        let login_response: LoginResponse = {
+            let data = fs::read_to_string("token.json").unwrap();
+            serde_json::from_str(&data).unwrap()
+        };
+
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap();
+
+        let headers = build_auth_headers(&login_response.access_token, &profile);
+
+        let url = build_url(&address, &String::from("Jobs"), &profile).unwrap();
+
+        let response = client.headers(&headers).get(&url).send().await.unwrap();
+
+        assert!(response.status().is_success());
+    }
+
 }
