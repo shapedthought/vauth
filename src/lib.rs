@@ -180,10 +180,9 @@
 //! response struct. 
 //!
 //! ```no run 
-//!
 //! let headers = build_auth_headers(&access_token, &profile);
+//! ```
 //!
-//! ``
 //! This can then be used directly with a reqwest client. 
 //!
 //! ## Authentication
