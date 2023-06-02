@@ -568,14 +568,14 @@ mod tests {
      #[tokio::test]
     async fn test_vb365_use_token() {
         dotenvy::dotenv().unwrap();
-        let mut profile = Profile::get_profile(VProfile::VB365);
+        let profile = Profile::get_profile(VProfile::VB365);
 
         dotenvy::dotenv().unwrap();
         
         let address = env::var("VB365_API_ADDRESS").unwrap();
 
         let login_response: LoginResponse = {
-            let data = fs::read_to_string("token.json").unwrap();
+            let data = fs::read_to_string("../token.json").unwrap();
             serde_json::from_str(&data).unwrap()
         };
 
@@ -588,7 +588,7 @@ mod tests {
 
         let url = build_url(&address, &String::from("Jobs"), &profile).unwrap();
 
-        let response = client.headers(&headers).get(&url).send().await.unwrap();
+        let response = client.get(&url).headers(headers).send().await.unwrap();
 
         assert!(response.status().is_success());
     }
