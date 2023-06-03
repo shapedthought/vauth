@@ -1,7 +1,9 @@
 //! # VAuth - Veeam Authentication Library
 //!
 //! _Note that this library is unofficial and not endorsed or supported by Veeam_
-//!
+//! 
+//! Also note that there are breaking changes in v1 vs the v0.1.x versions.
+//! 
 //! This library is used to authenticate to Veeam Backup Product REST APIs.
 //! It supports authentication to Veeam Backup & Replication, Veeam Backup for Microsoft Office 365, VONE and the Veeam Cloud Backup Products (AWS, AZURE & GCP).
 //!
@@ -18,7 +20,7 @@
 //! Login with direct use of the client.
 //!
 //! ```rust
-//! use vauth::{VServerBuilder, Profile, VProfile, build_url, LoginResponse};
+//! use vauth::{VClientBuilder, Profile, VProfile, build_url, LoginResponse};
 //! use serde_json::Value;
 //! use reqwest::Client;
 //! use anyhow::Result;
@@ -37,7 +39,7 @@
 //!
 //!     let address = env::var("VB365_API_ADDRESS").unwrap();
 //!
-//!     let (client, login_response) = VServerBuilder::new(&address, username)
+//!     let (client, login_response) = VClientBuilder::new(&address, username)
 //!         .insecure()
 //!         .build(&mut profile)
 //!         .await?;
@@ -124,12 +126,13 @@
 //! You can modify the defaults using the available methods before building the client.
 //!
 //! ```no run
-//! let client: Client = VServerBuilder::new(&address, username)
+//! let client: Client = VClientBuilder::new(&address, username)
 //!     .insecure()
 //!     .port("1234".to_string())
 //!     .api_version("v2".to_string())
 //!     .x_api_version("2.0-rev0".to_string())
-//!
+//!     .build(&mut profile)
+//!     .await?;
 //! ```
 //!
 //! ## Creating a Custom Profile
@@ -200,7 +203,7 @@ use std::{env, net::IpAddr, str::FromStr, time::Duration};
 use thiserror::Error;
 
 /// Returns a reqwest client with the required authentication headers.
-pub struct VServerBuilder {
+pub struct VClientBuilder {
     address: String,
     username: String,
     insecure: Option<bool>,
@@ -236,10 +239,10 @@ pub fn check_valid_ip(address: &str) -> bool {
     IpAddr::from_str(address).is_ok()
 }
 
-impl VServerBuilder {
-    /// Create a new VServerBuilder
+impl VClientBuilder {
+    /// Create a new VClientBuilder
     pub fn new(address: &String, username: String) -> Self {
-        VServerBuilder {
+        VClientBuilder {
             address: address.to_string(),
             username,
             insecure: None,
