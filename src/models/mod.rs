@@ -130,7 +130,15 @@ impl Creds {
 }
 
 #[doc(hidden)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RefreshCreds {
+    pub grant_type: String,
+    pub refresh_token: String,
+}
+
+/// LoginResponse contains the token and refresh token.
+/// This allows it to be saved and used in later calls.
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LoginResponse {
     pub access_token: String,
     pub token_type: String,

@@ -2,3 +2,5 @@
 /Cargo.lock
 .env
 .vscode
+
+token.json
