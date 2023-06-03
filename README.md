@@ -64,13 +64,9 @@ async fn  main() -> Result<()> {
 }
  ```
 
-When the build method is called, the library will attempt to authenticate to the Veeam REST API and return the reqwest client around
-the authentication response struct as a tuple.
+When the build method is called, the library will attempt to authenticate to the Veeam REST API and return the reqwest client with the pre-loaded authenticated headers as well as a response struct that contains the access token (in a Tuple).
 
-You can then use the reqwest client to make requests to the Veeam REST API.
-
-There are helper functions to both build the URL for the Veeam REST API as well as use an
-existing toke to build authented headers.
+You can then use the reqwest client to make requests immediately to the Veeam REST API as well as save the access token for later use.
 
 Note that the library uses async/await and therefore requires the use of the tokio runtime.
 
