@@ -501,6 +501,16 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn test_build_url_test_bad_address() {
+        let address = String::from("192.168.0");
+        let end_point = String::from("backups");
+        let vprofile = VProfile::VBR;
+        let profile = Profile::get_profile(vprofile);
+        let _url = build_url(&address, &end_point, &profile).unwrap();
+    }
+
+    #[test]
     fn test_build_profile() {
         let vprofile = VProfile::VBR;
         let profile = Profile::get_profile(vprofile);
