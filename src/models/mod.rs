@@ -136,7 +136,7 @@ pub struct RefreshCreds {
     pub refresh_token: String,
 }
 
-/// LoginResponse contains the token and refresh token. 
+/// LoginResponse contains the token and refresh token.
 /// This allows it to be saved and used in later calls.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LoginResponse {
