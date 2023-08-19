@@ -232,6 +232,10 @@ pub enum LogInError {
     ReqwestError(#[from] reqwest::Error),
     #[error("Status Code Error `{0}`")]
     StatusCodeError(reqwest::StatusCode),
+    #[error("Other Error `{0}`")]
+    OtherError(String),
+    #[error("Anyhow Error `{0}`")]
+    AnyhowError(#[from] anyhow::Error),
 }
 
 #[doc(hidden)]
