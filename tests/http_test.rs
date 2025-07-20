@@ -1,7 +1,11 @@
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
-use vauth::{build_auth_headers, build_url, LoginResponse, Profile, VProfile, VServerBuilder};
+use vauth::models::login_response::LoginResponse;
+use vauth::models::profile::Profile;
+use vauth::models::vprofile::VProfile;
+use vauth::utils::helpers::{build_auth_headers, build_url};
+use vauth::VClientBuilder;
 
 #[tokio::test]
 async fn test_entman_with_request() {
@@ -10,7 +14,7 @@ async fn test_entman_with_request() {
     let username = env::var("VEEAM_API_USERNAME").unwrap();
     let address = env::var("VEEAM_API_ADDRESS").unwrap();
 
-    let (client, _res) = VServerBuilder::new(&address, username)
+    let (client, _res) = VClientBuilder::new(&address, username)
         .insecure()
         .build(&mut profile)
         .await
@@ -30,7 +34,7 @@ async fn test_vbr_with_request() {
     let username = env::var("VEEAM_API_USERNAME").unwrap();
     let address = env::var("VEEAM_API_ADDRESS").unwrap();
 
-    let (client, _res) = VServerBuilder::new(&address, username)
+    let (client, _res) = VClientBuilder::new(&address, username)
         .insecure()
         .build(&mut profile)
         .await
@@ -50,7 +54,7 @@ async fn test_vb365_with_request() {
     let username = env::var("VEEAM_API_USERNAME").unwrap();
     let address = env::var("VB365_API_ADDRESS").unwrap();
 
-    let mut vserver = VServerBuilder::new(&address, username);
+    let mut vserver = VClientBuilder::new(&address, username);
 
     let (client, res) = vserver.insecure().build(&mut profile).await.unwrap();
 

@@ -18,7 +18,7 @@
 //! Login with direct use of the client.
 //!
 //! ```rust
-//! use vauth::{VServerBuilder, Profile, VProfile, build_url, LoginResponse};
+//! use vauth::{VClientBuilder, VProfile, build_url, LoginResponse};
 //! use serde_json::Value;
 //! use reqwest::Client;
 //! use anyhow::Result;
@@ -28,7 +28,9 @@
 //!
 //! #[tokio::main]
 //! async fn  main() -> Result<()> {
-//!     let mut profile = Profile::get_profile(VProfile::VB365);
+//! 
+//!     // New VProfile method to get the profile data, the old method is still available.
+//!     let mut profile = VProfile::VB365.profile_data();
 //!
 //!     // Used for testing
 //!     dotenvy::dotenv()?;
@@ -37,7 +39,7 @@
 //!
 //!     let address = env::var("VB365_API_ADDRESS").unwrap();
 //!
-//!     let (client, login_response) = VServerBuilder::new(&address, username)
+//!     let (client, login_response) = VClientBuilder::new(&address, username)
 //!         .insecure()
 //!         .build(&mut profile)
 //!         .await?;
@@ -47,7 +49,7 @@
 //!     let token_string = serde_json::to_string_pretty(&login_response)?;
 //!     json_file.write_all(token_string.as_bytes())?;
 //!
-//!     let endpoint = build_url(&address, &"Jobs".to_string(), &profile)?;
+//!     let endpoint = profile.build_url(&address, &"Jobs".to_string())?;
 //!
 //!     let response: Value = client.get(&endpoint).send().await?.json().await?;
 //!
@@ -75,7 +77,9 @@
 //!
 //! #[tokio::main]
 //! async fn  main() -> Result<()> {
-//!     let mut profile = Profile::get_profile(VProfile::VB365);
+//! 
+//!     // New VProfile method to get the profile data, the old method is still available.
+//!     let mut profile = VProfile::VB365.profile_data();
 //!
 //!     // Used for testing
 //!     dotenvy::dotenv()?;
@@ -90,10 +94,12 @@
 //!     let client = reqwest::Client::builder()
 //!         .danger_accept_invalid_certs(true)
 //!         .build()?;
+//!     
+//!     // New method on the profile to build the headers, the original function is still available.
+//!     let headers = profile.build_auth_headers(&login_response.access_token);
 //!
-//!     let headers = build_auth_headers(&login_response.access_token, &profile);
-//!
-//!     let endpoint = build_url(&address, &"Jobs".to_string(), &profile)?;
+//!     // New method on the profile to build the URL, the original function is still available.
+//!     let endpoint = profile.build_url(&address, &"Jobs".to_string())?;
 //!
 //!     let response: Value = client.get(&endpoint).headers(headers).send().await?.json().await?;
 //!
@@ -119,12 +125,12 @@
 //! | VBAZURE            | -     | v5          | -             |
 //! | VONE               | 1239  | v2.1        | -             |
 //!
-//! Last updated: 30/05/2023
+//! Last updated: 21/07/2025
 //!
 //! You can modify the defaults using the available methods before building the client.
 //!
 //! ```no run
-//! let client: Client = VServerBuilder::new(&address, username)
+//! let client: Client = VClientBuilder::new(&address, username)
 //!     .insecure()
 //!     .port("1234".to_string())
 //!     .api_version("v2".to_string())
@@ -168,7 +174,13 @@
 //! https://<address>:<port>/api/v1/backups
 //! ```
 //!
-//! You can use the helper function to build the URL:
+//! There are a couple ways to build the request URL, the first is a dedicated method on the Profile struct:
+//! 
+//! ```no run
+//! let endpoint = profile.build_url(&address, &"backups".to_string())?;
+//! ```
+//! 
+//! The second way is to use the utility function `build_url` which takes the address, endpoint, and profile as parameters:
 //!
 //! ```no run
 //! let endpoint = build_url(&address, &"backups".to_string(), &profile)?;
@@ -176,6 +188,14 @@
 //!
 //! ## Build Authentication Headers
 //!
+//! The library provides a couple of ways to build the authentication headers for the reqwest client.
+//! 
+//! The first is a method on the Profile struct which takes the access token as a parameter:
+//! 
+//! ```no run
+//! let headers = profile.build_auth_headers(&access_token);
+//!```
+//! 
 //! The library also provides a helper function to build the authentication headers from the saved
 //! response struct.
 //!
@@ -191,299 +211,16 @@
 //!
 //! See Veeam's documentation for more information on the authentication process.
 
-mod models;
-pub use models::*;
-use reqwest::header::{HeaderMap, ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
-// use serde_urlencoded;
-use regex::Regex;
-use std::{env, net::IpAddr, str::FromStr, time::Duration};
-use thiserror::Error;
+pub mod models;
+pub mod utils;
 
-/// Returns a reqwest client with the required authentication headers.
-pub struct VServerBuilder {
-    address: String,
-    username: String,
-    insecure: Option<bool>,
-    timeout: Option<u64>,
-    api_version: Option<String>,
-    x_api_version: Option<String>,
-    port: Option<String>,
-}
-
-/// LogInError is used to return errors from the build method.
-#[derive(Error, Debug)]
-pub enum LogInError {
-    #[error("The VEEAM_API_PASSWORD environmental variable is missing")]
-    EnvError(#[from] env::VarError),
-    #[error("IP Address is not valid")]
-    IpAddressError,
-    #[error("Username cannot be empty")]
-    UsernameEmpty,
-    #[error("Password cannot be empty")]
-    PasswordEmpty,
-    #[error("IP Address cannot be empty")]
-    IpAddressEmpty,
-    #[error("No refresh token")]
-    NoRefreshToken,
-    #[error("Error in sending request `{0:?}`")]
-    ReqwestError(#[from] reqwest::Error),
-    #[error("Status Code Error `{0}`")]
-    StatusCodeError(reqwest::StatusCode),
-}
-
-#[doc(hidden)]
-pub fn check_valid_ip(address: &str) -> bool {
-    IpAddr::from_str(address).is_ok()
-}
-
-impl VServerBuilder {
-    /// Create a new VServerBuilder
-    pub fn new(address: &String, username: String) -> Self {
-        VServerBuilder {
-            address: address.to_string(),
-            username,
-            insecure: None,
-            timeout: None,
-            api_version: None,
-            x_api_version: None,
-            port: None,
-        }
-    }
-    /// Set the Client to use insecure connections
-    pub fn insecure(&mut self) -> &mut Self {
-        self.insecure = Some(true);
-        self
-    }
-
-    /// Manually set the timeout for the client; default is 30 seconds
-    pub fn timeout(&mut self, value: u64) -> &mut Self {
-        self.timeout = Some(value);
-        self
-    }
-
-    /// Manually set the API version for the client, e.g v1, v2, v3
-    pub fn api_version(&mut self, value: String) -> &mut Self {
-        self.api_version = Some(value);
-        self
-    }
-
-    /// Manually set the X-API-Version for the client, e.g 1.1-rev0, 1.2-rev0
-    pub fn x_api_version(&mut self, value: String) -> &mut Self {
-        self.x_api_version = Some(value);
-        self
-    }
-
-    /// Manually set the port for the client, e.g 1234
-    pub fn port(&mut self, value: String) -> &mut Self {
-        self.port = Some(value);
-        self
-    }
-
-    /// Build the reqwest client, this takes a mutable reference to a Profile and will attempt to authenticate to the Veeam REST API.
-    /// It will return a tuple with both the client and the login response struct.
-    /// The login response struct contains the token and refresh token which you can save for
-    /// future use.
-    pub async fn build(
-        &mut self,
-        profile: &mut Profile,
-    ) -> Result<(reqwest::Client, LoginResponse), LogInError> {
-        if self.username.is_empty() {
-            return Err(LogInError::UsernameEmpty);
-        }
-
-        let api_pass_res = env::var("VEEAM_API_PASSWORD");
-
-        let api_pass = match api_pass_res {
-            Ok(r) => r,
-            Err(e) => return Err(LogInError::EnvError(e)),
-        };
-
-        if api_pass.is_empty() {
-            return Err(LogInError::PasswordEmpty);
-        }
-
-        if self.address.is_empty() {
-            return Err(LogInError::IpAddressEmpty);
-        }
-
-        if !check_valid_ip(&self.address) {
-            return Err(LogInError::IpAddressError);
-        }
-
-        if let Some(api_version) = &self.api_version {
-            let re = Regex::new("v[0-9]").unwrap();
-            re.replace(&profile.url, api_version);
-            profile.api_version = api_version.to_string();
-        }
-
-        if let Some(x_api_version) = &self.x_api_version {
-            profile.x_api_version = x_api_version.to_string();
-        }
-
-        if let Some(port) = &self.port {
-            let re = Regex::new("[0-9]{2,}").unwrap();
-            re.replace(&profile.url, port.as_str());
-            profile.port = port.to_string();
-        }
-
-        let insecure = self.insecure.unwrap_or(false);
-        let timeout_val = self.timeout.unwrap_or(30);
-
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(timeout_val))
-            .danger_accept_invalid_certs(insecure)
-            .build()?;
-
-        let mut headers = HeaderMap::new();
-        headers.insert(ACCEPT, "application/json".parse().unwrap());
-        let auth_url = format!("https://{}{}", self.address, profile.url);
-
-        let response: reqwest::Response = if profile.name != "ENTMAN" {
-            let creds = Creds::new(self.username.clone(), api_pass);
-            let creds_urlenc = serde_urlencoded::to_string(&creds).unwrap();
-            headers.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
-            headers.insert(
-                CONTENT_TYPE,
-                "application/x-www-form-urlencoded".parse().unwrap(),
-            );
-            client
-                .post(auth_url)
-                .body(creds_urlenc)
-                .headers(headers)
-                .send()
-                .await?
-        } else {
-            headers.insert(CONTENT_LENGTH, "0".parse().unwrap());
-            client
-                .post(auth_url)
-                .basic_auth(self.username.clone(), Some(api_pass))
-                .headers(headers)
-                .send()
-                .await?
-        };
-
-        let res_data: LoginResponse;
-
-        if response.status().is_success() {
-            if profile.name == "ENTMAN" {
-                let token = response
-                    .headers()
-                    .get("X-RestSvcSessionId")
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_string();
-                res_data = LoginResponse {
-                    access_token: token.clone(),
-                    refresh_token: token,
-                    expires_in: 900,
-                    token_type: String::from(""),
-                }
-            } else {
-                res_data = response.json().await?
-            }
-        } else {
-            return Err(LogInError::StatusCodeError(response.status()));
-        }
-
-        let bearer: String = if profile.name != *"ENTMAN" {
-            format!("Bearer {}", res_data.access_token.as_str().trim())
-        } else {
-            res_data.access_token.as_str().trim().to_owned()
-        };
-
-        let mut req_header = HeaderMap::new();
-        req_header.insert(ACCEPT, "application/json".parse().unwrap());
-        req_header.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-        if profile.name == *"ENTMAN" {
-            req_header.insert("X-RestSvcSessionId", bearer.parse().unwrap());
-        } else {
-            req_header.insert("Authorization", bearer.parse().unwrap());
-            req_header.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
-        }
-
-        let req_builder = reqwest::Client::builder()
-            .timeout(Duration::from_secs(timeout_val))
-            .danger_accept_invalid_certs(insecure)
-            .default_headers(req_header)
-            .build()?;
-
-        Ok((req_builder, res_data))
-    }
-}
-
-/// Helper function to build the url for the reqwest client
-///
-/// # Arguments
-///
-/// * `address` - The IP address of the Veeam server
-/// * `end_point` - The API endpoint to be called, but not including the API version e.g. /api/v1/backups > backups
-/// * `profile` - The profile to be used for the request
-pub fn build_url(
-    address: &String,
-    end_point: &String,
-    profile: &Profile,
-) -> Result<String, LogInError> {
-    if !check_valid_ip(address) {
-        return Err(LogInError::IpAddressError);
-    }
-
-    match profile.name.to_uppercase().as_str() {
-        "VBAZURE" => Ok(format!(
-            "https://{}/api/{}/{}",
-            address, profile.api_version, end_point
-        )),
-        "VBR" => Ok(format!(
-            "https://{}:{}/api/{}/{}",
-            address, profile.port, profile.api_version, end_point
-        )),
-        "VB365" => Ok(format!(
-            "https://{}:{}/{}/{}",
-            address, profile.port, profile.api_version, end_point
-        )),
-        "VBAWS" => Ok(format!(
-            "https://{}/api/{}/{}",
-            address, profile.api_version, end_point
-        )),
-        "VBGCP" => Ok(format!(
-            "https://{}/api/{}/{}",
-            address, profile.api_version, end_point
-        )),
-        "VONE" => Ok(format!(
-            "https://{}:{}/api/{}/{}",
-            address, profile.port, profile.api_version, end_point
-        )),
-        "ENTMAN" => Ok(format!(
-            "https://{}:{}/api/{}",
-            address, profile.port, end_point
-        )),
-        _ => Ok(format!(
-            "https://{}:{}{}/{}",
-            address, profile.port, profile.url, end_point
-        )),
-    }
-}
-
-/// Helper function to build Auth Headers, this is useful for when you still have a valid token
-pub fn build_auth_headers(token: &String, profile: &Profile) -> HeaderMap {
-    let mut headermap = HeaderMap::new();
-    headermap.insert(ACCEPT, "application/json".parse().unwrap());
-    headermap.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-    if profile.name == *"ENTMAN" {
-        headermap.insert("X-RestSvcSessionId", token.parse().unwrap());
-    } else {
-        let bearer = format!("Bearer {}", token);
-        headermap.insert("Authorization", bearer.parse().unwrap());
-        headermap.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
-    }
-    headermap
-}
+pub use models::{Profile, VProfile, LoginResponse, Creds, VClientBuilder};
+pub use utils::{check_valid_ip, build_auth_headers, build_url};
+pub use utils::error::LogInError;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    // use std::fs::{self, File};
-    // use std::io::Write;
+    use crate::models::vprofile::VProfile;
 
     #[test]
     fn it_works() {
@@ -494,21 +231,18 @@ mod tests {
     fn test_build_url() {
         let address = String::from("192.168.0.123");
         let end_point = String::from("backups");
-        let vprofile = VProfile::VBR;
-        let profile = Profile::get_profile(vprofile);
-        let url = build_url(&address, &end_point, &profile).unwrap();
+        let profile = VProfile::VBR.profile_data();
+        let url = profile.build_url(&address, &end_point).unwrap();
         assert_eq!(url, "https://192.168.0.123:9419/api/v1/backups");
     }
 
     #[test]
     fn test_build_profile() {
-        let vprofile = VProfile::VBR;
-        let profile = Profile::get_profile(vprofile);
+        let profile = VProfile::VBR.profile_data();
         assert!(profile.name == "VBR");
         assert!(profile.port == "9419");
         assert!(profile.url == ":9419/api/oauth2/token");
         assert!(profile.api_version == "v1");
         assert!(profile.x_api_version == "1.1-rev0");
     }
-
 }
