@@ -2,6 +2,8 @@
 
 _Note that this library is unofficial and not endorsed or supported by Veeam_
 
+Also note that there are breaking changes in v1 vs the v0.1.x versions.
+
 This library is used to authenticate to Veeam Backup Product REST APIs.
 It supports authentication to Veeam Backup & Replication, Veeam Backup for Microsoft Office 365, VONE and the Veeam Cloud Backup Products (AWS, AZURE & GCP).
 
@@ -11,7 +13,7 @@ The library uses the builder pattern to create a reqwest client with the require
 
 Note that the library requires the VEEAM_API_PASSWORD environmental variable to be set. This is the password that is used to authenticate to the Veeam REST API.
 
- This library is not intended to be a full featured library for the Veeam REST APIs, and there is no intention to turn it into one.
+This library is not intended to be a full featured library for the Veeam REST APIs, and there is no intention to turn it into one.
 
 ## Installation
 
@@ -20,12 +22,13 @@ Run the following command to add the library to your project:
 ```
 cargo add vauth
 ```
+
 ## Usage
 
 Login with direct use of the client.
 
 ```rust
-use vauth::{VServerBuilder, Profile, VProfile, build_url, LoginResponse};
+use vauth::{VClientBuilder, Profile, VProfile, build_url, LoginResponse};
 use serde_json::Value;
 use reqwest::Client;
 use anyhow::Result;
@@ -44,7 +47,7 @@ async fn  main() -> Result<()> {
 
     let address = env::var("VB365_API_ADDRESS").unwrap();
 
-    let (client, login_response) = VServerBuilder::new(&address, username)
+    let (client, login_response) = VClientBuilder::new(&address, username)
         .insecure()
         .build(&mut profile)
         .await?;
@@ -62,7 +65,7 @@ async fn  main() -> Result<()> {
 
     Ok(())
 }
- ```
+```
 
 When the build method is called, the library will attempt to authenticate to the Veeam REST API and return the reqwest client with the pre-loaded authenticated headers as well as a response struct that contains the access token (in a Tuple).
 
@@ -88,7 +91,7 @@ async fn  main() -> Result<()> {
     dotenvy::dotenv()?;
     let address = env::var("VB365_API_ADDRESS")?;
     let token_path = env::var("TOKEN_PATH")?;
-    
+
     let login_response: LoginResponse = {
         let data = fs::read_to_string(token_path)?;
         serde_json::from_str(&data)?
@@ -131,7 +134,7 @@ Last updated: 30/05/2023
 You can modify the defaults using the available methods before building the client.
 
 ```no run
-let client: Client = VServerBuilder::new(&address, username)
+let client: Client = VClientBuilder::new(&address, username)
     .insecure()
     .port("1234".to_string())
     .api_version("v2".to_string())
@@ -154,12 +157,12 @@ let mut profile = Profile::new(
 
 The Profile struct has the following fields:
 
-| Field         | Description                                                                                          |
-| ------------- | ---------------------------------------------------------------------------------------------------- |
-| name          | The name of the profile. This is used to identify the profile.                                       |
-| url           | The URL used to authenticate which must have the colon at the start                                  |
-| api_version   | The API version, this is used to construct the URLs e.g. http://address:port/api/API_VERSION/...     |
-| x_api_version | This is the X-API-Version header value.                                                              |
+| Field         | Description                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| name          | The name of the profile. This is used to identify the profile.                                   |
+| url           | The URL used to authenticate which must have the colon at the start                              |
+| api_version   | The API version, this is used to construct the URLs e.g. http://address:port/api/API_VERSION/... |
+| x_api_version | This is the X-API-Version header value.                                                          |
 
 This can then be passed to the build method.
 
@@ -197,4 +200,3 @@ This can then be used directly with a reqwest client.
 The library uses OAuth2 to authenticate to all the APIs except Enterprise Manager which uses Basic Authentication.
 
 See Veeam's documentation for more information on the authentication process.
-

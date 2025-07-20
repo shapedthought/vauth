@@ -1,7 +1,9 @@
 //! # VAuth - Veeam Authentication Library
 //!
 //! _Note that this library is unofficial and not endorsed or supported by Veeam_
-//!
+//! 
+//! Also note that there are breaking changes in v1 vs the v0.1.x versions.
+//! 
 //! This library is used to authenticate to Veeam Backup Product REST APIs.
 //! It supports authentication to Veeam Backup & Replication, Veeam Backup for Microsoft Office 365, VONE and the Veeam Cloud Backup Products (AWS, AZURE & GCP).
 //!
@@ -135,7 +137,8 @@
 //!     .port("1234".to_string())
 //!     .api_version("v2".to_string())
 //!     .x_api_version("2.0-rev0".to_string())
-//!
+//!     .build(&mut profile)
+//!     .await?;
 //! ```
 //!
 //! ## Creating a Custom Profile
@@ -234,6 +237,16 @@ mod tests {
         let profile = VProfile::VBR.profile_data();
         let url = profile.build_url(&address, &end_point).unwrap();
         assert_eq!(url, "https://192.168.0.123:9419/api/v1/backups");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_build_url_test_bad_address() {
+        let address = String::from("192.168.0");
+        let end_point = String::from("backups");
+        let vprofile = VProfile::VBR;
+        let profile = Profile::get_profile(vprofile);
+        let _url = build_url(&address, &end_point, &profile).unwrap();
     }
 
     #[test]
