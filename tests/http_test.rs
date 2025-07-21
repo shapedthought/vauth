@@ -1,7 +1,11 @@
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
-use vauth::{build_auth_headers, build_url, LoginResponse, Profile, VProfile, VClientBuilder};
+use vauth::models::login_response::LoginResponse;
+use vauth::models::profile::Profile;
+use vauth::models::vprofile::VProfile;
+use vauth::utils::helpers::{build_auth_headers, build_url};
+use vauth::VClientBuilder;
 
 #[tokio::test]
 async fn test_entman_with_request() {

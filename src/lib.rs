@@ -20,7 +20,7 @@
 //! Login with direct use of the client.
 //!
 //! ```rust
-//! use vauth::{VClientBuilder, Profile, VProfile, build_url, LoginResponse};
+//! use vauth::{VClientBuilder, VProfile, build_url, LoginResponse};
 //! use serde_json::Value;
 //! use reqwest::Client;
 //! use anyhow::Result;
@@ -30,7 +30,9 @@
 //!
 //! #[tokio::main]
 //! async fn  main() -> Result<()> {
-//!     let mut profile = Profile::get_profile(VProfile::VB365);
+//! 
+//!     // New VProfile method to get the profile data, the old method is still available.
+//!     let mut profile = VProfile::VB365.profile_data();
 //!
 //!     // Used for testing
 //!     dotenvy::dotenv()?;
@@ -49,7 +51,7 @@
 //!     let token_string = serde_json::to_string_pretty(&login_response)?;
 //!     json_file.write_all(token_string.as_bytes())?;
 //!
-//!     let endpoint = build_url(&address, &"Jobs".to_string(), &profile)?;
+//!     let endpoint = profile.build_url(&address, &"Jobs".to_string())?;
 //!
 //!     let response: Value = client.get(&endpoint).send().await?.json().await?;
 //!
@@ -77,7 +79,9 @@
 //!
 //! #[tokio::main]
 //! async fn  main() -> Result<()> {
-//!     let mut profile = Profile::get_profile(VProfile::VB365);
+//! 
+//!     // New VProfile method to get the profile data, the old method is still available.
+//!     let mut profile = VProfile::VB365.profile_data();
 //!
 //!     // Used for testing
 //!     dotenvy::dotenv()?;
@@ -92,10 +96,12 @@
 //!     let client = reqwest::Client::builder()
 //!         .danger_accept_invalid_certs(true)
 //!         .build()?;
+//!     
+//!     // New method on the profile to build the headers, the original function is still available.
+//!     let headers = profile.build_auth_headers(&login_response.access_token);
 //!
-//!     let headers = build_auth_headers(&login_response.access_token, &profile);
-//!
-//!     let endpoint = build_url(&address, &"Jobs".to_string(), &profile)?;
+//!     // New method on the profile to build the URL, the original function is still available.
+//!     let endpoint = profile.build_url(&address, &"Jobs".to_string())?;
 //!
 //!     let response: Value = client.get(&endpoint).headers(headers).send().await?.json().await?;
 //!
@@ -121,7 +127,7 @@
 //! | VBAZURE            | -     | v5          | -             |
 //! | VONE               | 1239  | v2.1        | -             |
 //!
-//! Last updated: 30/05/2023
+//! Last updated: 21/07/2025
 //!
 //! You can modify the defaults using the available methods before building the client.
 //!
@@ -171,7 +177,13 @@
 //! https://<address>:<port>/api/v1/backups
 //! ```
 //!
-//! You can use the helper function to build the URL:
+//! There are a couple ways to build the request URL, the first is a dedicated method on the Profile struct:
+//! 
+//! ```no run
+//! let endpoint = profile.build_url(&address, &"backups".to_string())?;
+//! ```
+//! 
+//! The second way is to use the utility function `build_url` which takes the address, endpoint, and profile as parameters:
 //!
 //! ```no run
 //! let endpoint = build_url(&address, &"backups".to_string(), &profile)?;
@@ -179,6 +191,14 @@
 //!
 //! ## Build Authentication Headers
 //!
+//! The library provides a couple of ways to build the authentication headers for the reqwest client.
+//! 
+//! The first is a method on the Profile struct which takes the access token as a parameter:
+//! 
+//! ```no run
+//! let headers = profile.build_auth_headers(&access_token);
+//!```
+//! 
 //! The library also provides a helper function to build the authentication headers from the saved
 //! response struct.
 //!
@@ -194,24 +214,12 @@
 //!
 //! See Veeam's documentation for more information on the authentication process.
 
-mod models;
-pub use models::*;
-use reqwest::header::{HeaderMap, ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
-// use serde_urlencoded;
-use regex::Regex;
-use std::{env, net::IpAddr, str::FromStr, time::Duration};
-use thiserror::Error;
+pub mod models;
+pub mod utils;
 
-/// Returns a reqwest client with the required authentication headers.
-pub struct VClientBuilder {
-    address: String,
-    username: String,
-    insecure: Option<bool>,
-    timeout: Option<u64>,
-    api_version: Option<String>,
-    x_api_version: Option<String>,
-    port: Option<String>,
-}
+pub use models::{Profile, VProfile, LoginResponse, Creds, VClientBuilder};
+pub use utils::{check_valid_ip, build_auth_headers, build_url};
+pub use utils::error::LogInError;
 
 /// LogInError is used to return errors from the build method.
 #[derive(Error, Debug)]
@@ -485,12 +493,9 @@ pub fn build_auth_headers(token: &String, profile: &Profile) -> HeaderMap {
     }
     headermap
 }
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    // use std::fs::{self, File};
-    // use std::io::Write;
+    use crate::models::vprofile::VProfile;
 
     #[test]
     fn it_works() {
@@ -501,9 +506,8 @@ mod tests {
     fn test_build_url() {
         let address = String::from("192.168.0.123");
         let end_point = String::from("backups");
-        let vprofile = VProfile::VBR;
-        let profile = Profile::get_profile(vprofile);
-        let url = build_url(&address, &end_point, &profile).unwrap();
+        let profile = VProfile::VBR.profile_data();
+        let url = profile.build_url(&address, &end_point).unwrap();
         assert_eq!(url, "https://192.168.0.123:9419/api/v1/backups");
     }
 
@@ -519,13 +523,11 @@ mod tests {
 
     #[test]
     fn test_build_profile() {
-        let vprofile = VProfile::VBR;
-        let profile = Profile::get_profile(vprofile);
+        let profile = VProfile::VBR.profile_data();
         assert!(profile.name == "VBR");
         assert!(profile.port == "9419");
         assert!(profile.url == ":9419/api/oauth2/token");
         assert!(profile.api_version == "v1");
         assert!(profile.x_api_version == "1.1-rev0");
     }
-
 }
