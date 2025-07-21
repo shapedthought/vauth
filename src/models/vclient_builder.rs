@@ -1,13 +1,19 @@
-use std::{env, time::Duration};
+use once_cell::sync::Lazy;
 use regex::Regex;
-use reqwest::header::{HeaderMap, ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
+use std::{env, time::Duration};
 
 use crate::{check_valid_ip, Creds, LogInError};
 
 use super::{LoginResponse, Profile};
 
-/// Returns a reqwest client with the required authentication headers.
+static API_VERSION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"v[0-9]").unwrap());
+static PORT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[0-9]{2,}").unwrap());
+
+/// Returns a reqwest client and a login response struct.
 /// The `VClientBuilder` struct is used to build a reqwest client for Veeam REST API authentication.
+/// It allows for configuration of various parameters such as address, username, insecure connection, timeout, API version, X-API-Version, and port.
+/// It works differently to the VServerBuilder which returned an authenticated reqwest client.
 pub struct VClientBuilder {
     address: String,
     username: String,
@@ -25,10 +31,10 @@ impl VClientBuilder {
     /// * `username` - The username to authenticate with
     /// # Returns
     /// A new instance of `VClientBuilder`
-    pub fn new(address: &String, username: String) -> Self {
+    pub fn new(address: &str, username: &str) -> Self {
         VClientBuilder {
             address: address.to_string(),
-            username,
+            username: username.to_string(),
             insecure: None,
             timeout: None,
             api_version: None,
@@ -36,6 +42,7 @@ impl VClientBuilder {
             port: None,
         }
     }
+
     /// Set the Client to use insecure connections
     pub fn insecure(&mut self) -> &mut Self {
         self.insecure = Some(true);
@@ -98,18 +105,16 @@ impl VClientBuilder {
         }
 
         if let Some(api_version) = &self.api_version {
-            let re = Regex::new("v[0-9]").unwrap();
-            re.replace(&profile.url, api_version);
+            API_VERSION_RE.replace(&profile.url, api_version);
             profile.api_version = api_version.to_string();
         }
 
         if let Some(x_api_version) = &self.x_api_version {
-            profile.x_api_version = x_api_version.to_string();
+            profile.x_api_version = Some(x_api_version.to_string());
         }
 
         if let Some(port) = &self.port {
-            let re = Regex::new("[0-9]{2,}").unwrap();
-            re.replace(&profile.url, port.as_str());
+            PORT_RE.replace(&profile.url, port.as_str());
             profile.port = port.to_string();
         }
 
@@ -122,16 +127,19 @@ impl VClientBuilder {
             .build()?;
 
         let mut headers = HeaderMap::new();
-        headers.insert(ACCEPT, "application/json".parse().unwrap());
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
         let auth_url = format!("https://{}{}", self.address, profile.url);
 
         let response: reqwest::Response = if profile.name != "ENTMAN" {
             let creds = Creds::new(&self.username, &api_pass);
-            let creds_urlenc = serde_urlencoded::to_string(&creds).unwrap();
-            headers.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
+            let creds_urlenc = serde_urlencoded::to_string(&creds)?;
+            if let Some(x_api_version) = &profile.x_api_version {
+                headers.insert("X-Api-Version", HeaderValue::from_str(x_api_version)?);
+            }
+            // headers.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
             headers.insert(
                 CONTENT_TYPE,
-                "application/x-www-form-urlencoded".parse().unwrap(),
+                HeaderValue::from_static("application/x-www-form-urlencoded"),
             );
             client
                 .post(auth_url)
@@ -156,9 +164,9 @@ impl VClientBuilder {
                 let token = response
                     .headers()
                     .get("X-RestSvcSessionId")
-                    .unwrap()
+                    .ok_or_else(|| LogInError::HeaderMissing("X-RestSvcSessionId".into()))?
                     .to_str()
-                    .unwrap()
+                    .map_err(|e| LogInError::OtherError(format!("Header to_str error: {}", e)))?
                     .to_string();
                 res_data = LoginResponse {
                     access_token: token.clone(),
@@ -173,28 +181,6 @@ impl VClientBuilder {
             return Err(LogInError::StatusCodeError(response.status()));
         }
 
-        let bearer: String = if profile.name != *"ENTMAN" {
-            format!("Bearer {}", res_data.access_token.as_str().trim())
-        } else {
-            res_data.access_token.as_str().trim().to_owned()
-        };
-
-        let mut req_header = HeaderMap::new();
-        req_header.insert(ACCEPT, "application/json".parse().unwrap());
-        req_header.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-        if profile.name == *"ENTMAN" {
-            req_header.insert("X-RestSvcSessionId", bearer.parse().unwrap());
-        } else {
-            req_header.insert("Authorization", bearer.parse().unwrap());
-            req_header.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
-        }
-
-        let req_builder = reqwest::Client::builder()
-            .timeout(Duration::from_secs(timeout_val))
-            .danger_accept_invalid_certs(insecure)
-            .default_headers(req_header)
-            .build()?;
-
-        Ok((req_builder, res_data))
+        Ok((client, res_data))
     }
 }

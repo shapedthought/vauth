@@ -10,7 +10,7 @@ pub struct Creds<'a> {
 }
 
 /// Default implementation for the `Creds` struct.
-impl <'a> Default for Creds<'a> {
+impl<'a> Default for Creds<'a> {
     fn default() -> Self {
         Creds {
             grant_type: "password",

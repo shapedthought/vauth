@@ -1,11 +1,10 @@
-use std::{env, time::Duration};
 use regex::Regex;
-use reqwest::header::{HeaderMap, ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
+use std::{env, time::Duration};
 
 use crate::{check_valid_ip, Creds, LogInError};
 
 use super::{LoginResponse, Profile};
-
 
 /// The `VServerBuilder` struct is used to build a reqwest client for Veeam REST API authentication.
 /// This struct is deprecated and will be removed in future versions. Use `VClientBuilder` instead.
@@ -107,7 +106,7 @@ impl VServerBuilder {
         }
 
         if let Some(x_api_version) = &self.x_api_version {
-            profile.x_api_version = x_api_version.to_string();
+            profile.x_api_version = Some(x_api_version.to_string());
         }
 
         if let Some(port) = &self.port {
@@ -131,7 +130,12 @@ impl VServerBuilder {
         let response: reqwest::Response = if profile.name != "ENTMAN" {
             let creds = Creds::new(&self.username, &api_pass);
             let creds_urlenc = serde_urlencoded::to_string(&creds).unwrap();
-            headers.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
+            if let Some(x_api_version) = &profile.x_api_version {
+                headers.insert(
+                    "X-Api-Version",
+                    HeaderValue::from_str(x_api_version).unwrap(),
+                );
+            }
             headers.insert(
                 CONTENT_TYPE,
                 "application/x-www-form-urlencoded".parse().unwrap(),
@@ -189,7 +193,9 @@ impl VServerBuilder {
             req_header.insert("X-RestSvcSessionId", bearer.parse().unwrap());
         } else {
             req_header.insert("Authorization", bearer.parse().unwrap());
-            req_header.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
+            if let Some(x_api_version) = &profile.x_api_version {
+                req_header.insert("X-Api-Version", x_api_version.parse().unwrap());
+            }
         }
 
         let req_builder = reqwest::Client::builder()

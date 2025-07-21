@@ -1,6 +1,6 @@
-use reqwest::header::{HeaderMap, ACCEPT, CONTENT_TYPE};
-use crate::models::profile::Profile;
 use super::error::LogInError;
+use crate::models::profile::Profile;
+use reqwest::header::HeaderMap;
 
 pub fn check_valid_ip(address: &str) -> bool {
     address.parse::<std::net::IpAddr>().is_ok()
@@ -18,9 +18,7 @@ pub fn build_url(
     end_point: &String,
     profile: &Profile,
 ) -> Result<String, LogInError> {
-    return profile
-        .build_url(address, end_point)
-        .map_err(|_| LogInError::IpAddressError);
+    return profile.build_url(address, end_point)
 }
 
 /// Helper function to build Auth Headers, this is useful for when you still have a valid token
@@ -30,16 +28,6 @@ pub fn build_url(
 /// * `profile` - The profile to be used for the request
 /// # Returns
 /// A HeaderMap containing the necessary headers for authentication
-pub fn build_auth_headers(token: &String, profile: &Profile) -> HeaderMap {
-    let mut headermap = HeaderMap::new();
-    headermap.insert(ACCEPT, "application/json".parse().unwrap());
-    headermap.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-    if profile.name == *"ENTMAN" {
-        headermap.insert("X-RestSvcSessionId", token.parse().unwrap());
-    } else {
-        let bearer = format!("Bearer {}", token);
-        headermap.insert("Authorization", bearer.parse().unwrap());
-        headermap.insert("X-Api-Version", profile.x_api_version.parse().unwrap());
-    }
-    headermap
+pub fn build_auth_headers(token: &String, profile: &Profile) -> Result<HeaderMap, reqwest::header::InvalidHeaderValue> {
+    return profile.build_auth_headers(token)
 }

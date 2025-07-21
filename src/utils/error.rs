@@ -1,5 +1,6 @@
 use std::env;
 
+use reqwest::header::InvalidHeaderValue;
 use thiserror::Error;
 
 /// LogInError is used to return errors from the build method.
@@ -21,6 +22,14 @@ pub enum LogInError {
     ReqwestError(#[from] reqwest::Error),
     #[error("Status Code Error `{0}`")]
     StatusCodeError(reqwest::StatusCode),
+    #[error("Header value error: {0}")]
+    HeaderValueError(#[from] InvalidHeaderValue),
+    #[error("Header missing: {0}")]
+    HeaderMissing(String),
+    #[error("Serde urlencoded error: {0}")]
+    SerdeUrlEncodedError(#[from] serde_urlencoded::ser::Error),
+    #[error("Serde JSON error: {0}")]
+    SerdeJsonError(#[from] serde_json::Error),
     #[error("Other Error `{0}`")]
     OtherError(String),
     #[error("Anyhow Error `{0}`")]
